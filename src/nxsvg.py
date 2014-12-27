@@ -10,6 +10,8 @@ def DefaultNodeFormatter(node, data):
     return 'Node[%d]\nABCDEF\n' % node, {}
 def DefaultEdgeFormatter(u, v, data):
     return 'Edge[%d, %d]' % (u, v), {}
+def midpoint(p1, p2):
+    return (p1[0] + p2[0]) * 0.5, (p1[1] + p2[1]) * 0.5
 
 class SVGRenderer(object):
     def __init__(self, 
@@ -100,11 +102,12 @@ class SVGRenderer(object):
         dwg = Drawing(size=size) #, profile='basic', version=1.2)
         dwg.viewbox(minx=0, miny=0, width=self.GlobalScale, height=self.GlobalScale)
 
-        # now add the marker
-        marker = Marker(orient='auto', markerUnits="strokeWidth", size=(20, 20), refX=1.0, refY=0.5)
-        marker.viewbox(minx=0, miny=0, width=1, height=1)
-        marker.add(Polygon(points=[(0, 0.2), (1, 0.5), (0, 0.8)], fill='black', stroke='none'))
-        dwg.defs.add(marker)
+        if g.is_directed():
+            # now add the marker
+            marker = Marker(orient='auto', markerUnits="strokeWidth", size=(20, 20), refX=1.0, refY=0.5)
+            marker.viewbox(minx=0, miny=0, width=1, height=1)
+            marker.add(Polygon(points=[(0, 0.2), (1, 0.5), (0, 0.8)], fill='black', stroke='none'))
+            dwg.defs.add(marker)
 
         pos = pos.copy()
         x = []
@@ -160,6 +163,7 @@ class SVGRenderer(object):
             dwg.add(grp)
 
         # draw the edges
+        drawn = {}
         for u, v, data in g.edges_iter(data=True):
             label, prop = edgeformatter(u, v, data)
             p1 = pos[u]
@@ -172,13 +176,47 @@ class SVGRenderer(object):
             p2 = p2[0], p2[1]
             p1 = self.scale(p1)
             p2 = self.scale(p2)
-            txtp = (p1[0] + p2[0]) * 0.5, (p1[1] + p2[1]) * 0.5
 
+            # parallel edges
+            nedges = g.number_of_edges(u, v)
+            if g.is_directed():
+                nedges += g.number_of_edges(v, u)
+            if u <= v:
+                key = (u, v)
+            else:
+                key = (v, u)
+            i = drawn.pop((u, v), 0)
+            drawn[(u, v)] = i + 1
+            i =  2 * i - (nedges - 1)
+            ang = math.atan2((p2[1] - p1[1]), p2[0] - p1[0]) 
+
+            l = ((p2[1] - p1[1]) ** 2 + (p2[0] - p1[0]) ** 2) ** 0.5
+            dx = -(p2[1] - p1[1]) / l 
+            dy = (p2[0] - p1[0]) / l 
+
+            # control point in the middle
+            txtp = (p1[0] + p2[0]) * 0.5 + 2 * self.FontSize * i * dx, \
+                    (p1[1] + p2[1]) * 0.5 + 2 * self.FontSize * i * dy 
+            controlp = tuple([
+                    (txtp[i] - (p1[i] + p2[i]) * 0.25) * 2
+                    for i in range(2)])
+                    
             grp = Group()
-            edge = Path(d=[('M', p1[0], p1[1]), (p2[0], p2[1])], 
-                    marker_end=marker.get_funciri(), 
-                    stroke_width=self.LineWidth, 
-                    stroke='black')
+            if g.is_directed():
+                edge = Path(d=[
+                        ('M', p1[0], p1[1]), 
+                        ('Q', midpoint(p1, controlp), txtp),
+                        ('Q', midpoint(controlp, p2), p2),
+                        ],
+                        marker_mid=marker.get_funciri(), 
+                        #marker_end=marker.get_funciri(), 
+                        stroke_width=self.LineWidth, 
+                        fill='none',
+                        stroke='black')
+            else:
+                edge = Path(d=[('M', p1[0], p1[1]), (txtp[0], txtp[1]), (p2[0], p2[1])], 
+                        stroke_width=self.LineWidth, 
+                        stroke='black')
             grp.add(edge)
             txt = Text(label, 
                     font_size=self.FontSize, 
@@ -187,8 +225,7 @@ class SVGRenderer(object):
                     insert=txtp, 
                     )
             # I am confused by there is no negtive sign before y diff
-            txt.rotate(180. / math.pi * math.atan2((p2[1] - p1[1]), 
-                p2[0] - p1[0]) + 180,
+            txt.rotate( 180. / math.pi * ang + 180,
                     center=txtp)
             # raise away from the edge by half a line
             txt.translate(tx=0, ty=-self.FontSize * 0.5)
@@ -198,8 +235,9 @@ class SVGRenderer(object):
 
 def test():
     import networkx as nx
-    g = nx.DiGraph()
+    g = nx.MultiDiGraph()
 
+    g.add_star(range(4))
     g.add_star(range(4))
     g.add_cycle(range(4))
     #pos = nx.spring_layout(g)
