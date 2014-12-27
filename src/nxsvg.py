@@ -274,7 +274,7 @@ class SVGRenderer(object):
             dwg.add(grp)
         return dwg.tostring()
 
-def test():
+def maketestg():
     import networkx as nx
     g = nx.MultiDiGraph()
 
@@ -282,10 +282,47 @@ def test():
     g.add_star(range(4))
     g.add_cycle(range(4))
     g.add_edge(5, 5)
-    #pos = nx.spring_layout(g)
+    import random
+    random.seed(9999)
     pos = nx.shell_layout(g)
+    return g, pos
+
+def test():
+    import networkx as nx
+    #pos = nx.spring_layout(g)
+    from sys import stdout
+    g, pos = maketestg()
     red = SVGRenderer() 
-    print red.draw(g, pos)
+    stdout.write(red.draw(g, pos))
+
+def testmpl():
+    from sys import stdout
+    import networkx as nx
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    fig = Figure(figsize=(9, 9))
+    fig.set_facecolor('white')
+    canvas = FigureCanvasAgg(fig)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.axison = False
+    ax.invert_yaxis()
+    g, pos = maketestg()
+    labels = {}
+    for node, data in g.nodes_iter(data=True):
+        labels[node] = DefaultNodeFormatter(node, data)
+    edge_labels = {}
+    for u, v, data in g.edges_iter(data=True):
+        edge_labels[u, v] = DefaultEdgeFormatter(u, v, data)
+
+    nx.draw_networkx_nodes(g, pos, ax=ax)
+    nx.draw_networkx_labels(g, pos, labels, ax=ax)
+    nx.draw_networkx_edges(g, pos, ax=ax)
+    nx.draw_networkx_edge_labels(g, pos, edge_labels, ax=ax)
+    canvas.print_svg(stdout, dpi=100)
 
 if __name__ == "__main__":
-    test()
+    from sys import argv
+    if len(argv) > 1 and argv[1] == 'mpl':
+        testmpl()
+    else:
+        test()
