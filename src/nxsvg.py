@@ -7,11 +7,36 @@ from svgwrite import Drawing
 import math
 
 def DefaultNodeFormatter(node, data):
-    return 'Node[%d]\nABCDEF\n' % node, {}
+    return 'Node[%d]\n%s' % (node, str(data)), {}
 def DefaultEdgeFormatter(u, v, data):
-    return 'Edge[%d, %d]' % (u, v), {}
+    return 'Edge[%d, %d]:%s' % (u, v, str(data)), {}
 def midpoint(p1, p2):
     return (p1[0] + p2[0]) * 0.5, (p1[1] + p2[1]) * 0.5
+
+def RichText(s, dy, **kwargs):
+    """ parse and create a center aligned multiline Text object:
+          dy linespacing.
+
+        coordinates are in viewbox
+
+        vertical baseline is the baseline of the last line
+    """
+    lines = s.split('\n')
+    x, y = kwargs.pop('insert', (0, 0))
+    y = y - dy * (len(lines) - 1)
+    txt = Text('', insert=(x, y), **kwargs)
+    for i, line in enumerate(lines):
+        if len(line) > 0:
+            if i == 0:
+                font_weight='bold'
+            else:
+                font_weight='normal'
+            ts = TSpan(line, x=[x], y=[y + dy * i], 
+                    font_weight=font_weight, 
+                    **kwargs)
+            txt.add(ts)
+    return txt
+
 
 class SVGRenderer(object):
     def __init__(self, 
@@ -72,36 +97,14 @@ class SVGRenderer(object):
             return a
         return tuple([f(a, b) for a, b in zip(v, s)])
 
-    def MultiLineText(self, s, **kwargs):
-        """ parse and create a center aligned multiline Text object:
-              dy linespacing.
-
-            coordinates are in viewbox
-        """
-        dy = kwargs.pop('dy', self.LineSpacing * self.FontSize)
-        x, y = kwargs.pop('insert', (0, 0))
-        lines = s.split('\n')
-        txt = Text('', insert=(x, y - 0.5 * dy * (len(lines) + 1)), **kwargs)
-        for i, line in enumerate(lines):
-            if len(line) > 0:
-                if i == 0:
-                    font_weight='bold'
-                else:
-                    font_weight='normal'
-                ts = TSpan(line, x=[x], dy=[dy], 
-                        font_weight=font_weight, 
-                        **kwargs)
-                txt.add(ts)
-        return txt
-
     def draw(self, g, pos, 
-            size=('400px', '400px'), 
+            size=('1200px', '1200px'), 
             nodeformatter=DefaultNodeFormatter, 
             edgeformatter=DefaultEdgeFormatter):
         """ formatter returns a string and a dict of the attributes(undefined yet)"""
         dwg = Drawing(size=size) #, profile='basic', version=1.2)
         dwg.viewbox(minx=0, miny=0, width=self.GlobalScale, height=self.GlobalScale)
-
+        dwg.fit()
         if g.is_directed():
             # now add the marker
             marker = Marker(orient='auto', markerUnits="strokeWidth", size=(20, 20), refX=1.0, refY=0.5)
@@ -151,14 +154,17 @@ class SVGRenderer(object):
                     ry=self.FontSize,
                     )
             grp.add(ele)
-            txtp = p[0] + wh[0] * 0.5, p[1] + wh[1] * 0.7
+            txtp = p[0] + wh[0] * 0.5, p[1] + wh[1]
 
-            txt = self.MultiLineText(label, 
+            txt = RichText(label, 
+                    dy=self.LineSpacing * self.FontSize,
                     insert=txtp, 
                     font_family='monospace', 
                     font_size=self.FontSize, 
                     text_anchor="middle")
 
+            # raise away from the edge by half a line
+            txt.translate(tx=0, ty=-self.FontSize * 0.5)
             grp.add(txt)
             dwg.add(grp)
 
@@ -218,7 +224,8 @@ class SVGRenderer(object):
                         stroke_width=self.LineWidth, 
                         stroke='black')
             grp.add(edge)
-            txt = Text(label, 
+            txt = RichText(label, 
+                    dy=self.LineSpacing * self.FontSize,
                     font_size=self.FontSize, 
                     font_family='monospace', 
                     text_anchor="middle",
