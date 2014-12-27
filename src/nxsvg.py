@@ -83,6 +83,17 @@ class SVGRenderer(object):
         phase = ang // 90
         #print pos, otherpos, ang, phase, anchors[phase]
         return anchors[phase]
+    def get_anchor2(self, i):
+        """ returns the anchor point of the edge
+            in size of the node box
+        """
+        anchors = [
+                (1.0, 0.5),
+                (0.5, 0.0),
+                (0., 0.5),
+                (0.5, 1.0)]
+        return anchors[i % 4]
+
     def scale(self, v):
         """ scale from unitary coordinate to SVG viewbox """
         return v[0] * self.GlobalScale, v[1] * self.GlobalScale
@@ -98,7 +109,7 @@ class SVGRenderer(object):
         return tuple([f(a, b) for a, b in zip(v, s)])
 
     def draw(self, g, pos, 
-            size=('1200px', '1200px'), 
+            size=('400px', '400px'), 
             nodeformatter=DefaultNodeFormatter, 
             edgeformatter=DefaultEdgeFormatter):
         """ formatter returns a string and a dict of the attributes(undefined yet)"""
@@ -172,16 +183,6 @@ class SVGRenderer(object):
         drawn = {}
         for u, v, data in g.edges_iter(data=True):
             label, prop = edgeformatter(u, v, data)
-            p1 = pos[u]
-            p2 = pos[v]
-            a = self.get_anchor(p1, p2)
-            p1 = p1[0] + size[u][0] * a[0], p1[1] + size[u][1] * a[1]
-            a = self.get_anchor(p2, p1)
-            p2 = p2[0] + size[v][0] * a[0], p2[1] + size[v][1] * a[1]
-            p1 = p1[0], p1[1]
-            p2 = p2[0], p2[1]
-            p1 = self.scale(p1)
-            p2 = self.scale(p2)
 
             # parallel edges
             nedges = g.number_of_edges(u, v)
@@ -192,21 +193,54 @@ class SVGRenderer(object):
             else:
                 key = (v, u)
             i = drawn.pop((u, v), 0)
+
             drawn[(u, v)] = i + 1
             i =  2 * i - (nedges - 1)
-            ang = math.atan2((p2[1] - p1[1]), p2[0] - p1[0]) 
 
-            l = ((p2[1] - p1[1]) ** 2 + (p2[0] - p1[0]) ** 2) ** 0.5
-            dx = -(p2[1] - p1[1]) / l 
-            dy = (p2[0] - p1[0]) / l 
+            if u != v:
+                p1 = pos[u]
+                p2 = pos[v]
+                a = self.get_anchor(p1, p2)
+                p1 = p1[0] + size[u][0] * a[0], p1[1] + size[u][1] * a[1]
+                a = self.get_anchor(p2, p1)
+                p2 = p2[0] + size[v][0] * a[0], p2[1] + size[v][1] * a[1]
+                p1 = self.scale(p1)
+                p2 = self.scale(p2)
 
-            # control point in the middle
-            txtp = (p1[0] + p2[0]) * 0.5 + 2 * self.FontSize * i * dx, \
-                    (p1[1] + p2[1]) * 0.5 + 2 * self.FontSize * i * dy 
-            controlp = tuple([
-                    (txtp[i] - (p1[i] + p2[i]) * 0.25) * 2
-                    for i in range(2)])
-                    
+                ang = math.atan2((p2[1] - p1[1]), p2[0] - p1[0]) 
+
+                l = ((p2[1] - p1[1]) ** 2 + (p2[0] - p1[0]) ** 2) ** 0.5
+                dx = -(p2[1] - p1[1]) / l 
+                dy = (p2[0] - p1[0]) / l 
+
+                # control point in the middle
+                txtp = (p1[0] + p2[0]) * 0.5 + 2 * self.FontSize * i * dx, \
+                        (p1[1] + p2[1]) * 0.5 + 2 * self.FontSize * i * dy 
+                controlp = tuple([
+                        (txtp[i] - (p1[i] + p2[i]) * 0.25) * 2
+                        for i in range(2)])
+            else:
+                p1 = pos[u]
+                p2 = pos[v]
+                a = self.get_anchor2(i)
+                p1 = p1[0] + size[u][0] * a[0], p1[1] + size[u][1] * a[1]
+                a = self.get_anchor2(i - 1)
+                p2 = p2[0] + size[v][0] * a[0], p2[1] + size[v][1] * a[1]
+                p1 = self.scale(p1)
+                p2 = self.scale(p2)
+                ang = math.atan2((p2[1] - p1[1]), p2[0] - p1[0]) 
+
+                l = ((p2[1] - p1[1]) ** 2 + (p2[0] - p1[0]) ** 2) ** 0.5
+                dx = -(p2[1] - p1[1]) / l 
+                dy = (p2[0] - p1[0]) / l 
+
+                # control point in the middle
+                txtp = (p1[0] + p2[0]) * 0.5 + 2 * self.FontSize * i * dx, \
+                        (p1[1] + p2[1]) * 0.5 + 2 * self.FontSize * i * dy 
+                controlp = tuple([
+                        (txtp[i] - (p1[i] + p2[i]) * 0.25) * 2
+                        for i in range(2)])
+                
             grp = Group()
             if g.is_directed():
                 edge = Path(d=[
@@ -247,6 +281,7 @@ def test():
     g.add_star(range(4))
     g.add_star(range(4))
     g.add_cycle(range(4))
+    g.add_edge(5, 5)
     #pos = nx.spring_layout(g)
     pos = nx.shell_layout(g)
     red = SVGRenderer() 
