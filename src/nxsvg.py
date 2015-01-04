@@ -181,6 +181,7 @@ class SVGRenderer(object):
 
         # draw the edges
         drawn = {}
+
         for u, v, data in g.edges_iter(data=True):
             label, prop = edgeformatter(u, v, data)
 
@@ -197,9 +198,11 @@ class SVGRenderer(object):
             drawn[(u, v)] = i + 1
             i =  2 * i - (nedges - 1)
 
-            if u != v:
-                p1 = pos[u]
-                p2 = pos[v]
+            p1 = pos[u]
+            p2 = pos[v]
+            if p1 != p2:
+                oldp1 = p1
+                oldp2 = p2
                 a = self.get_anchor(p1, p2)
                 p1 = p1[0] + size[u][0] * a[0], p1[1] + size[u][1] * a[1]
                 a = self.get_anchor(p2, p1)
@@ -220,8 +223,6 @@ class SVGRenderer(object):
                         (txtp[i] - (p1[i] + p2[i]) * 0.25) * 2
                         for i in range(2)])
             else:
-                p1 = pos[u]
-                p2 = pos[v]
                 a = self.get_anchor2(i)
                 p1 = p1[0] + size[u][0] * a[0], p1[1] + size[u][1] * a[1]
                 a = self.get_anchor2(i - 1)
@@ -314,8 +315,8 @@ def testmpl():
     for u, v, data in g.edges_iter(data=True):
         edge_labels[u, v] = DefaultEdgeFormatter(u, v, data)
 
-    nx.draw_networkx_nodes(g, pos, ax=ax)
-    nx.draw_networkx_labels(g, pos, labels, ax=ax)
+    #nx.draw_networkx_nodes(g, pos, ax=ax)
+    nx.draw_networkx_labels(g, pos, labels, ax=ax, bbox=dict(pad=10, edgecolor='k'))
     nx.draw_networkx_edges(g, pos, ax=ax)
     nx.draw_networkx_edge_labels(g, pos, edge_labels, ax=ax)
     canvas.print_svg(stdout, dpi=100)
