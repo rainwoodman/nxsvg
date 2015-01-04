@@ -1,4 +1,4 @@
-__all__ = ['SVGRenderer']
+__all__ = ['SVGRenderer', 'hierarchy_layout']
 from svgwrite.path import Path
 from svgwrite.shapes import Rect, Line, Polygon, Circle
 from svgwrite.text import Text, TextPath, TSpan
@@ -59,7 +59,10 @@ def hierarchy_layout(g, thresh=6):
 
     subgraphs = list(nx.weakly_connected_component_subgraphs(g2))
     regions = len(subgraphs)
-    
+
+    if regions == 1:
+        return nx.shell_layout(g)
+ 
     centerg = nx.complete_graph(regions)
     k = (1.0 * regions) ** -0.5
     centerpos = nx.spring_layout(centerg, iterations=20)
