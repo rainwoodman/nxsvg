@@ -107,7 +107,7 @@ class SVGRenderer(object):
                 return p
             return a
         return tuple([f(a, b) for a, b in zip(v, s)])
-    def makemarker(self, symbol, stroke, fill, type):
+    def makemarker(self, symbol, size, stroke, stroke_width, fill, type, units):
         if type == 'marker_start':
             refX, refY = 0.0, 0.5
         if type == 'marker_mid':
@@ -115,17 +115,18 @@ class SVGRenderer(object):
         if type == 'marker_end':
             refX, refY = 1.0, 0.5
 
-        marker = Marker(orient='auto', markerUnits="strokeWidth", size=(20, 20), refX=refX, refY=refY)
-        marker.viewbox(minx=0, miny=0, width=1, height=1)
-        if symbol == True or symbol[0] == 't':
-            marker.add(Polygon(points=[(0, 0.2), (1, 0.5), (0, 0.8)], fill=stroke, stroke='none'))
+        marker = Marker(orient='auto', markerUnits=units, size=(size, size), refX=refX * size, refY=refY * size)
+        marker.viewbox(minx=0, miny=0, width=size, height=size)
+        size1 = size - 1
+        if symbol[0] == 't':
+            marker.add(Polygon(points=[(0, 0.2 * size1), (1 * size1, 0.5 * size1), (0, 0.8 * size1)], fill=stroke, stroke='none'))
         elif symbol in ('^', '<', '>', 'v'):
-            marker.add(Polygon(points=[(0, 0.2), (1, 0.5), (0, 0.8)], fill='none', stroke=stroke, 
-                stroke_width=0.05))
+            marker.add(Polygon(points=[(0, 0.2 * size1), (1 * size1, 0.5 * size1), (0, 0.8 * size1)], fill=fill, stroke=stroke, 
+                stroke_width=stroke_width))
         elif symbol in ('o', 'O'):
-            marker.add(Circle(center=(0.5, 0.5), r=0.5, stroke=stroke, fill='none', stroke_width=0.05))
+            marker.add(Circle(center=(0.5 * size1, 0.5 * size1), r=0.5 * size, stroke=stroke, fill=fill, stroke_width=stroke_width))
         elif symbol in ('.'):
-            marker.add(Circle(center=(0.5, 0.5), r=0.5, fill=stroke, stroke='none'))
+            marker.add(Circle(center=(0.5 * size1, 0.5 * size1), r=0.5 * size, fill=stroke, stroke='none'))
         else:
             raise ValueError("Marker type `%s` unknown" % type)
         return marker
@@ -274,16 +275,25 @@ class SVGRenderer(object):
                 
             grp = Group()
             stroke_width = prop.pop('stroke_width', self.LineWidth)
+            marker_stroke_width = prop.pop('marker_stroke_width', stroke_width)
             fill = prop.pop('fill', 'none')
+            marker_fill = prop.pop('marker_fill', 'none')
             stroke = prop.pop('stroke', 'black')
+
+            markerUnits = prop.pop('marker_units', 'userSpaceOnUse')
+            markerSize = prop.pop('marker_size', 1.0)
+            for type in ['marker_mid', 'marker_start', 'marker_end']:
+                symbol = prop.pop(type, 'none')
+                if g.is_directed() and type == 'marker_mid' and symbol == 'none':
+                    symbol = 't'
+                if symbol == 'none': continue
+                marker = self.makemarker(symbol=symbol, size=markerSize, 
+                        units=markerUnits, stroke_width=marker_stroke_width, 
+                        stroke=stroke, fill=marker_fill, type=type)
+                dwg.defs.add(marker)
+                prop[type] = marker.get_funciri()
             if g.is_directed():
                 # now add the marker
-                for type in ['marker_mid', 'marker_start', 'marker_end']:
-                    symbol = prop.pop(type, None)
-                    if symbol is None: continue
-                    marker = self.makemarker(symbol=symbol, stroke=stroke, fill=fill, type=type)
-                    dwg.defs.add(marker)
-                    prop[type] = marker.get_funciri()
 
                 edge = Path(d=[
                         ('M', p1[0], p1[1]), 
@@ -343,14 +353,19 @@ def TestNodeFormatter(node, data):
     return 'Node[%d]' % node, prop
 
 def TestEdgeFormatter(u, v, data):
-    colors = ['red', 'green', 'yellow', 'white', 'blue', 'gray']
+    colors = ['red', 'green', 'yellow', 'blue', 'gray']
     prop = {}
     prop['stroke_width'] = '%dpx' % (data['value'] + 1)
     prop['stroke'] = colors[data['value'] % len(colors)]
     markers = 'o.t>'
-    prop['marker_start'] = markers[(u + v + data['value']) % len(markers)]
-    prop['marker_mid'] = markers[(u + v + data['value'] + 1) % len(markers)]
-    prop['marker_end'] = markers[(u + v + data['value'] + 2) % len(markers)]
+    prop['marker_size'] = 10.0 # (data['value'] % 3.0  * 2.0 + 4.0) * 5
+#    prop['marker_units'] = 'userSpaceOnUse'
+    prop['marker_units'] = 'strokeWidth'
+    prop['marker_stroke_width'] = 1.0
+    prop['marker_fill'] = 'white'
+    prop['marker_start'] = markers[(data['value']) % len(markers)]
+    prop['marker_mid'] = markers[(data['value'] + 1) % len(markers)]
+    prop['marker_end'] = markers[( data['value'] + 2) % len(markers)]
     return 'Edge[%d, %d]' % (u, v), prop
 
 def test():
