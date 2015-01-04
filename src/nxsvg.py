@@ -42,6 +42,35 @@ def RichText(s, dy, **kwargs):
             txt.add(ts)
     return txt
 
+def hierarchy_layout(g, thresh=6):
+    """ layout graph g with a hierarchy. 
+        clusters of nodes are at nearby locations.
+    """
+
+    import networkx as nx
+    pos = {}
+    if len(g) < thresh:
+        return nx.shell_layout(g)
+
+    g2 = g.subgraph(g.nodes())
+    if nx.is_weakly_connected(g2):
+        cutset = nx.minimum_edge_cut(g2)
+        g2.remove_edges_from(cutset)
+
+    subgraphs = list(nx.weakly_connected_component_subgraphs(g2))
+    regions = len(subgraphs)
+    
+    centerg = nx.complete_graph(regions)
+    k = (1.0 * regions) ** -0.5
+    centerpos = nx.spring_layout(centerg, iterations=20)
+
+    for sgi, sg in enumerate(subgraphs):
+        mypos = hierarchy_layout(sg, thresh=thresh)
+        for node in mypos:
+            pos[node] = [
+                    centerpos[sgi][i] + 0.5 * (mypos[node][i] - 0.5) * k for i in range(2)]
+    
+    return pos
 
 class SVGRenderer(object):
     def __init__(self, 
@@ -329,7 +358,7 @@ class SVGRenderer(object):
             stroke_linecap = prop.pop('stroke_linecap', 'butt')
 
             markerUnits = prop.pop('marker_units', 'userSpaceOnUse')
-            markerSize = prop.pop('marker_size', 1.0)
+            markerSize = prop.pop('marker_size', self.FontSize)
             for type in ['marker_mid', 'marker_start', 'marker_end']:
                 symbol = prop.pop(type, 'none')
                 if g.is_directed() and type == 'marker_mid' and symbol == 'none':
