@@ -169,7 +169,6 @@ class SVGRenderer(object):
         sw = stroke_width
         marker = Marker(orient='auto', markerUnits=units, size=(size1, size1), 
                 refX=refX * size1, refY=refY * size1)
-        marker.viewbox(minx=0, miny=0, width=size1, height=size1)
         if symbol[0] == 't':
             marker.add(Polygon(points=[(sw, sw+0.2 * size), (sw + size, sw + 0.5 * size), (sw, sw + 0.8 * size)], 
                 fill=stroke, 
