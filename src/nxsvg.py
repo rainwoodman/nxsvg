@@ -187,7 +187,7 @@ class SVGRenderer(object):
             raise ValueError("Marker type `%s` unknown" % type)
         return marker
 
-    def draw(self, g, pos, 
+    def draw(self, g, pos=None,
             size=('800px', '800px'), 
             nodeformatter=DefaultNodeFormatter, 
             edgeformatter=DefaultEdgeFormatter):
@@ -230,6 +230,9 @@ class SVGRenderer(object):
         dwg = Drawing(size=size) #, profile='basic', version=1.2)
         dwg.viewbox(minx=0, miny=0, width=self.GlobalScale, height=self.GlobalScale)
         dwg.fit()
+
+        if pos is None:
+            pos = hierarchy_layout(g)
 
         pos = pos.copy()
         x = []
