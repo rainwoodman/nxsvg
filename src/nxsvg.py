@@ -484,6 +484,25 @@ def testmpl():
     nx.draw_networkx_edge_labels(g, pos, edge_labels, ax=ax)
     canvas.print_svg(stdout, dpi=100)
 
+def install_repr_svg():
+    import networkx as nx
+    def getsvg(graph):
+        try:
+            pos = nx.graphviz_layout(graph)
+            raise Exception()
+        except Exception as e:
+            pos = hierarchy_layout(graph)
+        GlobalScale=len(graph) ** 0.6 * 300.
+        rend = SVGRenderer(
+            GlobalScale=GlobalScale,
+            Margin=GlobalScale * 0.05)
+        return rend.draw(graph, pos, 
+                size=('600px', '600px'))
+
+    nx.Graph._repr_svg_ = getsvg
+    
+install_repr_svg()
+
 if __name__ == "__main__":
     from sys import argv
     if len(argv) > 1 and argv[1] == 'mpl':
