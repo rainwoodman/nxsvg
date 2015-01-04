@@ -166,18 +166,24 @@ class SVGRenderer(object):
         if symbol[0] in 't.':
             stroke_width = 0
         size1 = size + stroke_width * 2
+        sw = stroke_width
         marker = Marker(orient='auto', markerUnits=units, size=(size1, size1), 
                 refX=refX * size1, refY=refY * size1)
-        marker.viewbox(minx=-stroke_width, miny=-stroke_width, width=size1, height=size1)
+        marker.viewbox(minx=0, miny=0, width=size1, height=size1)
         if symbol[0] == 't':
-            marker.add(Polygon(points=[(0, 0.2 * size), (1 * size, 0.5 * size), (0, 0.8 * size)], fill=stroke, stroke='none'))
+            marker.add(Polygon(points=[(sw, sw+0.2 * size), (sw + size, sw + 0.5 * size), (sw, sw + 0.8 * size)], 
+                fill=stroke, 
+                stroke='none'))
         elif symbol[0] == '.':
-            marker.add(Circle(center=(0.5 * size, 0.5 * size), r=0.5 * size, fill=stroke, stroke='none'))
+            marker.add(Circle(center=(sw + 0.5 * size, sw + 0.5 * size), 
+                r=0.5 * size, fill=stroke, stroke='none'))
         elif symbol[0].upper() == 'A':
-            marker.add(Polygon(points=[(0, 0.2 * size), (1 * size, 0.5 * size), (0, 0.8 * size)], fill=fill, stroke=stroke, 
+            marker.add(Polygon(points=[(sw, sw+0.2 * size), (sw + size, sw + 0.5 * size), (sw, sw + 0.8 * size)], 
+                fill=fill, stroke=stroke, 
                 stroke_width=stroke_width, stroke_linecap='round'))
         elif symbol[0].upper() == 'O':
-            marker.add(Circle(center=(0.5 * size, 0.5 * size), r=0.5 * size, stroke=stroke, fill=fill, stroke_width=stroke_width))
+            marker.add(Circle(center=(sw + 0.5 * size, sw + 0.5 * size), 
+                r=0.5 * size, stroke=stroke, fill=fill, stroke_width=stroke_width))
         else:
             raise ValueError("Marker type `%s` unknown" % type)
         return marker
