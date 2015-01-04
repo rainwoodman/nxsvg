@@ -114,28 +114,40 @@ class SVGRenderer(object):
             refX, refY = 0.5, 0.5
         if type == 'marker_end':
             refX, refY = 1.0, 0.5
-
-        marker = Marker(orient='auto', markerUnits=units, size=(size, size), refX=refX * size, refY=refY * size)
-        marker.viewbox(minx=0, miny=0, width=size, height=size)
-        size1 = size - 1
+        if symbol[0] in 't.':
+            stroke_width = 0
+        size1 = size + stroke_width * 2
+        marker = Marker(orient='auto', markerUnits=units, size=(size1, size1), 
+                refX=refX * size1, refY=refY * size1)
+        marker.viewbox(minx=-stroke_width, miny=-stroke_width, width=size1, height=size1)
         if symbol[0] == 't':
-            marker.add(Polygon(points=[(0, 0.2 * size1), (1 * size1, 0.5 * size1), (0, 0.8 * size1)], fill=stroke, stroke='none'))
-        elif symbol in ('^', '<', '>', 'v'):
-            marker.add(Polygon(points=[(0, 0.2 * size1), (1 * size1, 0.5 * size1), (0, 0.8 * size1)], fill=fill, stroke=stroke, 
-                stroke_width=stroke_width))
-        elif symbol in ('o', 'O'):
-            marker.add(Circle(center=(0.5 * size1, 0.5 * size1), r=0.5 * size, stroke=stroke, fill=fill, stroke_width=stroke_width))
-        elif symbol in ('.'):
-            marker.add(Circle(center=(0.5 * size1, 0.5 * size1), r=0.5 * size, fill=stroke, stroke='none'))
+            marker.add(Polygon(points=[(0, 0.2 * size), (1 * size, 0.5 * size), (0, 0.8 * size)], fill=stroke, stroke='none'))
+        elif symbol[0] == '.':
+            marker.add(Circle(center=(0.5 * size, 0.5 * size), r=0.5 * size, fill=stroke, stroke='none'))
+        elif symbol[0].upper() == 'A':
+            marker.add(Polygon(points=[(0, 0.2 * size), (1 * size, 0.5 * size), (0, 0.8 * size)], fill=fill, stroke=stroke, 
+                stroke_width=stroke_width, stroke_linecap='round'))
+        elif symbol[0].upper() == 'O':
+            marker.add(Circle(center=(0.5 * size, 0.5 * size), r=0.5 * size, stroke=stroke, fill=fill, stroke_width=stroke_width))
         else:
             raise ValueError("Marker type `%s` unknown" % type)
         return marker
 
     def draw(self, g, pos, 
-            size=('400px', '400px'), 
+            size=('800px', '800px'), 
             nodeformatter=DefaultNodeFormatter, 
             edgeformatter=DefaultEdgeFormatter):
         """ 
+
+        Draw graph g to a svg file, return the content as a string.
+
+        g: the graph
+
+        pos: position of the nodes given by, for example, networkx.spring_layout
+
+        size: size of the figure in pixels; we will change the view box to GlobalScale,
+              thus it is not very relavant.
+
         nodeformatter returns a string and a dict of rect attributes
             supported rect attributs are:
                 stroke, stroke_width, fill, rx, ry
@@ -143,6 +155,23 @@ class SVGRenderer(object):
         edgeformatter returns a string and a dict of edge attributes
             supported edge attributs are:
                 stroke, stroke_width, fill
+
+                marker_start, marker_end, marker_mid: 
+                            'A': triangle shape
+                            'o': circle shape
+                            't': inside of a triangle
+                            '.': inside of a circle
+                            'none': no marker
+                    marker_mid defaults to 't' for directed graphs
+
+                marker_units: 
+                        'strokeWidth': marker_size and marker_stroke_width relative to stroke width
+                        'userSpaceOnUse': (default) relative to the userspace unit (GlobalScale)
+                                    
+                marker_size: size of marker in marker_units
+                marker_stroke_width: stroke width of the marker, in marker_units
+                marker_stroke: stroke color of a shape marker or the color of 'inside' symbols
+                marker_fill: fill color of a shape marker
         """
         dwg = Drawing(size=size) #, profile='basic', version=1.2)
         dwg.viewbox(minx=0, miny=0, width=self.GlobalScale, height=self.GlobalScale)
@@ -279,6 +308,7 @@ class SVGRenderer(object):
             fill = prop.pop('fill', 'none')
             marker_fill = prop.pop('marker_fill', 'none')
             stroke = prop.pop('stroke', 'black')
+            stroke_linecap = prop.pop('stroke_linecap', 'butt')
 
             markerUnits = prop.pop('marker_units', 'userSpaceOnUse')
             markerSize = prop.pop('marker_size', 1.0)
@@ -292,23 +322,20 @@ class SVGRenderer(object):
                         stroke=stroke, fill=marker_fill, type=type)
                 dwg.defs.add(marker)
                 prop[type] = marker.get_funciri()
-            if g.is_directed():
-                # now add the marker
 
-                edge = Path(d=[
-                        ('M', p1[0], p1[1]), 
-                        ('Q', midpoint(p1, controlp), txtp),
-                        ('Q', midpoint(controlp, p2), p2),
-                        ],
-                        stroke_width=stroke_width,
-                        fill=fill,
-                        stroke=stroke,
-                        **prop)
-            else:
-                edge = Path(d=[('M', p1[0], p1[1]), (txtp[0], txtp[1]), (p2[0], p2[1])], 
-                        stroke_width=self.LineWidth, 
-                        stroke='black')
+            edge = Path(d=[
+                    ('M', p1[0], p1[1]), 
+                    ('Q', midpoint(p1, controlp), txtp),
+                    ('Q', midpoint(controlp, p2), p2),
+                    ],
+                    stroke_width=stroke_width,
+                    fill=fill,
+                    stroke=stroke,
+                    stroke_linecap=stroke_linecap,
+                    **prop)
+
             grp.add(edge)
+
             txt = RichText(label, 
                     dy=self.LineSpacing * self.FontSize,
                     font_size=self.FontSize, 
@@ -357,7 +384,7 @@ def TestEdgeFormatter(u, v, data):
     prop = {}
     prop['stroke_width'] = '%dpx' % (data['value'] + 1)
     prop['stroke'] = colors[data['value'] % len(colors)]
-    markers = 'o.t>'
+    markers = 'o.tA'
     prop['marker_size'] = 10.0 # (data['value'] % 3.0  * 2.0 + 4.0) * 5
 #    prop['marker_units'] = 'userSpaceOnUse'
     prop['marker_units'] = 'strokeWidth'
