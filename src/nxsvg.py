@@ -314,8 +314,8 @@ class SVGRenderer(object):
                 dy = (p2[0] - p1[0]) / l 
 
                 # control point in the middle
-                txtp = (p1[0] + p2[0]) * 0.5 + 2 * self.FontSize * i * dx, \
-                        (p1[1] + p2[1]) * 0.5 + 2 * self.FontSize * i * dy 
+                txtp = (p1[0] + p2[0]) * 0.5 + 2 * self.EdgeSpacing * self.FontSize * i * dx, \
+                        (p1[1] + p2[1]) * 0.5 + 2 * self.EdgeSpacing * self.FontSize * i * dy 
                 controlp = tuple([
                         (txtp[i] - (p1[i] + p2[i]) * 0.25) * 2
                         for i in range(2)])
@@ -372,20 +372,21 @@ class SVGRenderer(object):
 
 def maketestg():
     import networkx as nx
+    import random
+    random.seed(9999)
     g = nx.MultiDiGraph()
 
     g.add_star(range(4))
     g.add_star(range(4))
     g.add_cycle(range(4))
     g.add_edge(5, 5)
+    g.add_edge(5, 5)
     
     for node, data in g.nodes_iter(data=True):
         data['value'] = node
 
     for u, v, data in g.edges_iter(data=True):
-        data['value'] = u + v
-    import random
-    random.seed(9999)
+        data['value'] = u + v + int(random.random() * 3)
     pos = nx.shell_layout(g)
     return g, pos
 
