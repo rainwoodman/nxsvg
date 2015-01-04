@@ -7,7 +7,7 @@ from svgwrite import Drawing
 import math
 
 def DefaultNodeFormatter(node, data):
-    return 'Node[%d]\n%s' % (node, str(data)), {}
+    return '\aNode[%d]\n%s' % (node, str(data)), {}
 def DefaultEdgeFormatter(u, v, data):
     return 'Edge[%d, %d]:%s' % (u, v, str(data)), {}
 def midpoint(p1, p2):
@@ -20,14 +20,19 @@ def RichText(s, dy, **kwargs):
         coordinates are in viewbox
 
         vertical baseline is the baseline of the last line
+
+        \\n starts a new line
+        \\a makes the line bold
     """
     lines = s.split('\n')
     x, y = kwargs.pop('insert', (0, 0))
     y = y - dy * (len(lines) - 1)
     txt = Text('', insert=(x, y), **kwargs)
     for i, line in enumerate(lines):
+        line = line.strip()
         if len(line) > 0:
-            if i == 0:
+            if line[0] == '\a':
+                line = line[1:]
                 font_weight='bold'
             else:
                 font_weight='normal'
@@ -41,15 +46,27 @@ def RichText(s, dy, **kwargs):
 class SVGRenderer(object):
     def __init__(self, 
             GlobalScale=1000., 
-            Padding = 10., 
+            Margin = 10., 
             LineWidth = '1px', 
             FontSize = 20.,
+            EdgeSpacing = 2.,
             LineSpacing = 1.5):
+        """ creates a SVGRender with these configurations:
+
+            GlobalScale: units of the image
+            Margin: no nodes are placed beyond margin
+            LineWidth: width of a line
+            FontSize: size of the font for labels
+            LineSpacing: spacing between lines with in a label, in FontSize
+            EdgeSpacing: spacing between parallel edges, in FontSize
+        """
+
 
         self.GlobalScale = GlobalScale
-        self.Padding = Padding
+        self.Margin = Margin
         self.LineWidth = LineWidth
         self.FontSize = FontSize
+        self.EdgeSpacing = EdgeSpacing
         self.LineSpacing = LineSpacing
 
     def get_size(self, labeltxt):
@@ -99,7 +116,7 @@ class SVGRenderer(object):
         return v[0] * self.GlobalScale, v[1] * self.GlobalScale
     def clip(self, v, s):
         """ clip the position of a node box in unitary coordinate """
-        p = self.Padding / self.GlobalScale
+        p = self.Margin / self.GlobalScale
         def f(a, b):
             if a + b > 1.0 - p:
                 return 1.0 - p- b
@@ -276,9 +293,10 @@ class SVGRenderer(object):
                 dx = -(p2[1] - p1[1]) / l 
                 dy = (p2[0] - p1[0]) / l 
 
-                # control point in the middle
-                txtp = (p1[0] + p2[0]) * 0.5 + 2 * self.FontSize * i * dx, \
-                        (p1[1] + p2[1]) * 0.5 + 2 * self.FontSize * i * dy 
+                # middle of the edge
+                txtp = (p1[0] + p2[0]) * 0.5 + self.EdgeSpacing * self.FontSize * i * dx, \
+                        (p1[1] + p2[1]) * 0.5 + self.EdgeSpacing * self.FontSize * i * dy 
+                # control point
                 controlp = tuple([
                         (txtp[i] - (p1[i] + p2[i]) * 0.25) * 2
                         for i in range(2)])
@@ -377,7 +395,7 @@ def TestNodeFormatter(node, data):
     colors = ['red', 'green', 'yellow', 'white', 'blue', 'gray']
     prop['fill'] = colors[node]
     prop['stroke'] = colors[(node + 1) % len(colors)]
-    return 'Node[%d]' % node, prop
+    return '\aNode[%d]' % node, prop
 
 def TestEdgeFormatter(u, v, data):
     colors = ['red', 'green', 'yellow', 'blue', 'gray']
@@ -393,14 +411,14 @@ def TestEdgeFormatter(u, v, data):
     prop['marker_start'] = markers[(data['value']) % len(markers)]
     prop['marker_mid'] = markers[(data['value'] + 1) % len(markers)]
     prop['marker_end'] = markers[( data['value'] + 2) % len(markers)]
-    return 'Edge[%d, %d]' % (u, v), prop
+    return '\aEdge\n[%d, %d]' % (u, v), prop
 
 def test():
     import networkx as nx
     #pos = nx.spring_layout(g)
     from sys import stdout
     g, pos = maketestg()
-    red = SVGRenderer() 
+    red = SVGRenderer(EdgeSpacing=4.0) 
     stdout.write(red.draw(g, pos, nodeformatter=TestNodeFormatter, edgeformatter=TestEdgeFormatter))
 
 def testmpl():
