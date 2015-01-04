@@ -1,6 +1,6 @@
 __all__ = ['SVGRenderer']
 from svgwrite.path import Path
-from svgwrite.shapes import Rect, Line, Polygon
+from svgwrite.shapes import Rect, Line, Polygon, Circle
 from svgwrite.text import Text, TextPath, TSpan
 from svgwrite.container import Marker, Group
 from svgwrite import Drawing
@@ -107,21 +107,45 @@ class SVGRenderer(object):
                 return p
             return a
         return tuple([f(a, b) for a, b in zip(v, s)])
+    def makemarker(self, symbol, stroke, fill, type):
+        if type == 'marker_start':
+            refX, refY = 0.0, 0.5
+        if type == 'marker_mid':
+            refX, refY = 0.5, 0.5
+        if type == 'marker_end':
+            refX, refY = 1.0, 0.5
+
+        marker = Marker(orient='auto', markerUnits="strokeWidth", size=(20, 20), refX=refX, refY=refY)
+        marker.viewbox(minx=0, miny=0, width=1, height=1)
+        if symbol == True or symbol[0] == 't':
+            marker.add(Polygon(points=[(0, 0.2), (1, 0.5), (0, 0.8)], fill=stroke, stroke='none'))
+        elif symbol in ('^', '<', '>', 'v'):
+            marker.add(Polygon(points=[(0, 0.2), (1, 0.5), (0, 0.8)], fill='none', stroke=stroke, 
+                stroke_width=0.05))
+        elif symbol in ('o', 'O'):
+            marker.add(Circle(center=(0.5, 0.5), r=0.5, stroke=stroke, fill='none', stroke_width=0.05))
+        elif symbol in ('.'):
+            marker.add(Circle(center=(0.5, 0.5), r=0.5, fill=stroke, stroke='none'))
+        else:
+            raise ValueError("Marker type `%s` unknown" % type)
+        return marker
 
     def draw(self, g, pos, 
             size=('400px', '400px'), 
             nodeformatter=DefaultNodeFormatter, 
             edgeformatter=DefaultEdgeFormatter):
-        """ formatter returns a string and a dict of the attributes(undefined yet)"""
+        """ 
+        nodeformatter returns a string and a dict of rect attributes
+            supported rect attributs are:
+                stroke, stroke_width, fill, rx, ry
+
+        edgeformatter returns a string and a dict of edge attributes
+            supported edge attributs are:
+                stroke, stroke_width, fill
+        """
         dwg = Drawing(size=size) #, profile='basic', version=1.2)
         dwg.viewbox(minx=0, miny=0, width=self.GlobalScale, height=self.GlobalScale)
         dwg.fit()
-        if g.is_directed():
-            # now add the marker
-            marker = Marker(orient='auto', markerUnits="strokeWidth", size=(20, 20), refX=1.0, refY=0.5)
-            marker.viewbox(minx=0, miny=0, width=1, height=1)
-            marker.add(Polygon(points=[(0, 0.2), (1, 0.5), (0, 0.8)], fill='black', stroke='none'))
-            dwg.defs.add(marker)
 
         pos = pos.copy()
         x = []
@@ -157,12 +181,18 @@ class SVGRenderer(object):
             wh = size[node]
             wh, p = self.scale(wh), self.scale(p)
             grp = Group()
+            stroke = prop.pop('stroke', 'black')
+            fill = prop.pop('fill', 'none')
+            stroke_width = prop.pop('stroke_width', self.LineWidth)
+            rx = prop.pop('rx', self.FontSize)
+            ry = prop.pop('ry', self.FontSize)
             ele = Rect(insert=p, size=wh, 
-                    stroke_width=self.LineWidth,
-                    stroke='black',
-                    fill='none',
+                    stroke_width=stroke_width,
+                    stroke=stroke,
+                    fill=fill,
                     rx=self.FontSize,
                     ry=self.FontSize,
+                    **prop
                     )
             grp.add(ele)
             txtp = p[0] + wh[0] * 0.5, p[1] + wh[1]
@@ -243,17 +273,27 @@ class SVGRenderer(object):
                         for i in range(2)])
                 
             grp = Group()
+            stroke_width = prop.pop('stroke_width', self.LineWidth)
+            fill = prop.pop('fill', 'none')
+            stroke = prop.pop('stroke', 'black')
             if g.is_directed():
+                # now add the marker
+                for type in ['marker_mid', 'marker_start', 'marker_end']:
+                    symbol = prop.pop(type, None)
+                    if symbol is None: continue
+                    marker = self.makemarker(symbol=symbol, stroke=stroke, fill=fill, type=type)
+                    dwg.defs.add(marker)
+                    prop[type] = marker.get_funciri()
+
                 edge = Path(d=[
                         ('M', p1[0], p1[1]), 
                         ('Q', midpoint(p1, controlp), txtp),
                         ('Q', midpoint(controlp, p2), p2),
                         ],
-                        marker_mid=marker.get_funciri(), 
-                        #marker_end=marker.get_funciri(), 
-                        stroke_width=self.LineWidth, 
-                        fill='none',
-                        stroke='black')
+                        stroke_width=stroke_width,
+                        fill=fill,
+                        stroke=stroke,
+                        **prop)
             else:
                 edge = Path(d=[('M', p1[0], p1[1]), (txtp[0], txtp[1]), (p2[0], p2[1])], 
                         stroke_width=self.LineWidth, 
@@ -283,10 +323,35 @@ def maketestg():
     g.add_star(range(4))
     g.add_cycle(range(4))
     g.add_edge(5, 5)
+    
+    for node, data in g.nodes_iter(data=True):
+        data['value'] = node
+
+    for u, v, data in g.edges_iter(data=True):
+        data['value'] = u + v
     import random
     random.seed(9999)
     pos = nx.shell_layout(g)
     return g, pos
+
+def TestNodeFormatter(node, data):
+    prop = {}
+    prop['stroke_width'] = '%dpx' % (data['value'] + 1)
+    colors = ['red', 'green', 'yellow', 'white', 'blue', 'gray']
+    prop['fill'] = colors[node]
+    prop['stroke'] = colors[(node + 1) % len(colors)]
+    return 'Node[%d]' % node, prop
+
+def TestEdgeFormatter(u, v, data):
+    colors = ['red', 'green', 'yellow', 'white', 'blue', 'gray']
+    prop = {}
+    prop['stroke_width'] = '%dpx' % (data['value'] + 1)
+    prop['stroke'] = colors[data['value'] % len(colors)]
+    markers = 'o.t>'
+    prop['marker_start'] = markers[(u + v + data['value']) % len(markers)]
+    prop['marker_mid'] = markers[(u + v + data['value'] + 1) % len(markers)]
+    prop['marker_end'] = markers[(u + v + data['value'] + 2) % len(markers)]
+    return 'Edge[%d, %d]' % (u, v), prop
 
 def test():
     import networkx as nx
@@ -294,7 +359,7 @@ def test():
     from sys import stdout
     g, pos = maketestg()
     red = SVGRenderer() 
-    stdout.write(red.draw(g, pos))
+    stdout.write(red.draw(g, pos, nodeformatter=TestNodeFormatter, edgeformatter=TestEdgeFormatter))
 
 def testmpl():
     from sys import stdout
