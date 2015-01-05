@@ -7,6 +7,7 @@ from svgwrite import Drawing
 import math
 
 _passthrough_ = [
+    'font_size',
     'position',
     'rx',
     'ry',
@@ -119,12 +120,12 @@ class SVGRenderer(object):
         self.EdgeSpacing = EdgeSpacing
         self.LineSpacing = LineSpacing
 
-    def get_size(self, labeltxt):
+    def get_size(self, labeltxt, font_size):
         """ return size of label text in unitary cooridnate """
         lines = labeltxt.split('\n')
         tw = max([len(line) for line in lines])
         th = len(lines)
-        fac = self.FontSize / self.GlobalScale
+        fac = font_size / self.GlobalScale
         width = tw * fac
         height = th * fac * self.LineSpacing
         return width, height
@@ -267,7 +268,8 @@ class SVGRenderer(object):
 
         for node, data in g.nodes_iter(data=True):
             label, prop = nodeformatter(node, data)
-            size[node] = self.get_size(label)
+            font_size = prop.pop('font_size', self.FontSize)
+            size[node] = self.get_size(label, font_size)
             if 'position' in prop:
                 pos[node] = prop['position']
             p = pos[node]
@@ -362,6 +364,7 @@ class SVGRenderer(object):
 
             markerUnits = prop.pop('marker_units', 'userSpaceOnUse')
             markerSize = prop.pop('marker_size', self.FontSize)
+            font_size = prop.pop('font_size', self.FontSize)
             for type in ['marker_mid', 'marker_start', 'marker_end']:
                 symbol = prop.pop(type, 'none')
                 if g.is_directed() and type == 'marker_mid' and symbol == 'none':
@@ -387,8 +390,8 @@ class SVGRenderer(object):
             edge_layer.add(edge)
 
             txt = RichText(label, 
-                    dy=self.LineSpacing * self.FontSize,
-                    font_size=self.FontSize, 
+                    dy=self.LineSpacing * font_size,
+                    font_size=font_size, 
                     font_family='monospace', 
                     text_anchor="middle",
                     insert=txtp, 
@@ -397,7 +400,7 @@ class SVGRenderer(object):
             txt.rotate( 180. / math.pi * ang + 180,
                     center=txtp)
             # raise away from the edge by half a line
-            txt.translate(tx=0, ty=-self.FontSize * 0.5)
+            txt.translate(tx=0, ty=-font_size * 0.5)
             label_layer.add(txt)
 
         # draw the nodes
@@ -413,6 +416,7 @@ class SVGRenderer(object):
             stroke_width = prop.pop('stroke_width', self.LineWidth)
             rx = prop.pop('rx', self.FontSize)
             ry = prop.pop('ry', self.FontSize)
+            font_size = prop.pop('font_size', self.FontSize)
             ele = Rect(insert=p, size=wh, 
                     stroke_width=stroke_width,
                     stroke=stroke,
@@ -425,14 +429,14 @@ class SVGRenderer(object):
             txtp = p[0] + wh[0] * 0.5, p[1] + wh[1]
 
             txt = RichText(label, 
-                    dy=self.LineSpacing * self.FontSize,
+                    dy=self.LineSpacing * font_size,
                     insert=txtp, 
                     font_family='monospace', 
-                    font_size=self.FontSize, 
+                    font_size=font_size, 
                     text_anchor="middle")
 
             # raise away from the edge by half a line
-            txt.translate(tx=0, ty=-self.FontSize * 0.5)
+            txt.translate(tx=0, ty=-font_size * 0.5)
             label_layer.add(txt)
         return dwg.tostring()
 
