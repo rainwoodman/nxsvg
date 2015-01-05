@@ -15,6 +15,7 @@ _passthrough_ = [
     'stroke',
     'stroke_width',
     'stroke_linecap',
+    'stroke_dasharray',
     'marker_fill',
     'marker_stroke_width',
     'marker_units',
@@ -25,10 +26,12 @@ _passthrough_ = [
 ]
 def DefaultNodeFormatter(node, data):
     props = dict([(key, data[key]) for key in _passthrough_ if key in data])
-    return '%s' % (str(node)), props
+    label = data.get('label', str(node))
+    return str(label), props
 def DefaultEdgeFormatter(u, v, data):
     props = dict([(key, data[key]) for key in _passthrough_ if key in data])
-    return '%s' % (str(data)), props
+    label = data.get('label', '')
+    return str(label), props
 def midpoint(p1, p2):
     return (p1[0] + p2[0]) * 0.5, (p1[1] + p2[1]) * 0.5
 
@@ -48,17 +51,20 @@ def RichText(s, dy, **kwargs):
     y = y - dy * (len(lines) - 1)
     txt = Text('', insert=(x, y), **kwargs)
     for i, line in enumerate(lines):
-        line = line.strip()
         if len(line) > 0:
             if line[0] == '\a':
                 line = line[1:]
                 font_weight='bold'
             else:
                 font_weight='normal'
-            ts = TSpan(line, x=[x], y=[y + dy * i], 
-                    font_weight=font_weight, 
-                    **kwargs)
-            txt.add(ts)
+        else:
+            font_weight='normal'
+            line = " "
+        ts = TSpan(line, x=[x], y=[y + dy * i], 
+                font_weight=font_weight, 
+                **kwargs)
+        txt.add(ts)
+
     return txt
 
 def hierarchy_layout(g, thresh=6):
