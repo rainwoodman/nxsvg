@@ -6,10 +6,28 @@ from svgwrite.container import Marker, Group
 from svgwrite import Drawing
 import math
 
+_passthrough_ = [
+    'position',
+    'rx',
+    'ry',
+    'fill',
+    'stroke',
+    'stroke_width',
+    'stroke_linecap',
+    'marker_fill',
+    'marker_stroke_width',
+    'marker_units',
+    'marker_size',
+    'marker_start',
+    'marker_mid',
+    'marker_end',
+]
 def DefaultNodeFormatter(node, data):
-    return '\aNode[%d]\n%s' % (node, str(data)), {}
+    props = dict([(key, data[key]) for key in _passthrough_ if key in data])
+    return '%s' % (str(node)), props
 def DefaultEdgeFormatter(u, v, data):
-    return 'Edge[%d, %d]:%s' % (u, v, str(data)), {}
+    props = dict([(key, data[key]) for key in _passthrough_ if key in data])
+    return '%s' % (str(data)), props
 def midpoint(p1, p2):
     return (p1[0] + p2[0]) * 0.5, (p1[1] + p2[1]) * 0.5
 
@@ -78,7 +96,7 @@ def hierarchy_layout(g, thresh=6):
 class SVGRenderer(object):
     def __init__(self, 
             GlobalScale=1000., 
-            Margin = 10., 
+            Margin = 100., 
             LineWidth = '1px', 
             FontSize = 20.,
             EdgeSpacing = 2.,
@@ -146,16 +164,16 @@ class SVGRenderer(object):
     def scale(self, v):
         """ scale from unitary coordinate to SVG viewbox """
         return v[0] * self.GlobalScale, v[1] * self.GlobalScale
-    def clip(self, v, s):
+    def clip(self, v, s, asp):
         """ clip the position of a node box in unitary coordinate """
         p = self.Margin / self.GlobalScale
-        def f(a, b):
-            if a + b > 1.0 - p:
-                return 1.0 - p- b
+        def f(a, b, c):
+            if a + b > c - p:
+                return c - p- b
             if a < p:
                 return p
             return a
-        return tuple([f(a, b) for a, b in zip(v, s)])
+        return tuple([f(a, b, c) for a, b, c in zip(v, s, [asp, 1.0])])
     def makemarker(self, symbol, size, stroke, stroke_width, fill, type, units):
         if type == 'marker_start':
             refX, refY = 0.0, 0.5
@@ -188,7 +206,7 @@ class SVGRenderer(object):
         return marker
 
     def draw(self, g, pos=None,
-            size=('800px', '800px'), 
+            size=('800px', '600px'), 
             nodeformatter=DefaultNodeFormatter, 
             edgeformatter=DefaultEdgeFormatter):
         """ 
@@ -228,8 +246,16 @@ class SVGRenderer(object):
                 marker_fill: fill color of a shape marker
         """
         dwg = Drawing(size=size) #, profile='basic', version=1.2)
-        dwg.viewbox(minx=0, miny=0, width=self.GlobalScale, height=self.GlobalScale)
+        aspect = 1.0 * int(size[0].replace('px', '')) / int(size[1].replace('px', ''))
+        dwg.viewbox(minx=-self.Margin * aspect, miny=-self.Margin, width=aspect * self.GlobalScale + 2 * self.Margin * aspect, height=self.GlobalScale + 2 * self.Margin)
         dwg.fit()
+        label_layer = Group()
+        node_layer = Group()
+        edge_layer = Group()
+
+        dwg.add(node_layer)
+        dwg.add(edge_layer)
+        dwg.add(label_layer)
 
         if pos is None:
             pos = hierarchy_layout(g)
@@ -240,9 +266,11 @@ class SVGRenderer(object):
         size = {}
 
         for node, data in g.nodes_iter(data=True):
-            p = pos[node]
             label, prop = nodeformatter(node, data)
             size[node] = self.get_size(label)
+            if 'position' in prop:
+                pos[node] = prop['position']
+            p = pos[node]
             x.append(p[0])
             y.append(p[1])
 
@@ -250,57 +278,25 @@ class SVGRenderer(object):
         xmax = max(x)
         ymin = min(y)
         ymax = max(y)
-
         # normalize input pos to 0 ~ 1
         for node in g.nodes_iter():
             p = pos[node]
-            p = ((p[0] - xmin) / (xmax - xmin),
-                 (p[1] - ymin) / (ymax - ymin) )
+            p = (aspect * (p[0] - xmin) / (xmax - xmin),
+                 1.0 * (p[1] - ymin) / (ymax - ymin) )
 
             wh = size[node]
-            p = self.clip(p, wh)
+            p = tuple([p[i] - wh[i] * 0.5 for i in range(2)])
+            p = self.clip(p, wh, aspect)
+            # shift so that center is correct
             pos[node] = p
 
-        # draw the nodes
-        for node, data in g.nodes_iter(data=True):
-            label, prop = nodeformatter(node, data)
-            p = pos[node]
-            wh = size[node]
-            wh, p = self.scale(wh), self.scale(p)
-            grp = Group()
-            stroke = prop.pop('stroke', 'black')
-            fill = prop.pop('fill', 'none')
-            stroke_width = prop.pop('stroke_width', self.LineWidth)
-            rx = prop.pop('rx', self.FontSize)
-            ry = prop.pop('ry', self.FontSize)
-            ele = Rect(insert=p, size=wh, 
-                    stroke_width=stroke_width,
-                    stroke=stroke,
-                    fill=fill,
-                    rx=self.FontSize,
-                    ry=self.FontSize,
-                    **prop
-                    )
-            grp.add(ele)
-            txtp = p[0] + wh[0] * 0.5, p[1] + wh[1]
-
-            txt = RichText(label, 
-                    dy=self.LineSpacing * self.FontSize,
-                    insert=txtp, 
-                    font_family='monospace', 
-                    font_size=self.FontSize, 
-                    text_anchor="middle")
-
-            # raise away from the edge by half a line
-            txt.translate(tx=0, ty=-self.FontSize * 0.5)
-            grp.add(txt)
-            dwg.add(grp)
 
         # draw the edges
         drawn = {}
 
         for u, v, data in g.edges_iter(data=True):
             label, prop = edgeformatter(u, v, data)
+            prop.pop('position', 0)
 
             # parallel edges
             nedges = g.number_of_edges(u, v)
@@ -333,13 +329,7 @@ class SVGRenderer(object):
                 dx = -(p2[1] - p1[1]) / l 
                 dy = (p2[0] - p1[0]) / l 
 
-                # middle of the edge
-                txtp = (p1[0] + p2[0]) * 0.5 + self.EdgeSpacing * self.FontSize * i * dx, \
-                        (p1[1] + p2[1]) * 0.5 + self.EdgeSpacing * self.FontSize * i * dy 
-                # control point
-                controlp = tuple([
-                        (txtp[i] - (p1[i] + p2[i]) * 0.25) * 2
-                        for i in range(2)])
+                fac = 1.0
             else:
                 a = self.get_anchor2(i)
                 p1 = p1[0] + size[u][0] * a[0], p1[1] + size[u][1] * a[1]
@@ -352,13 +342,15 @@ class SVGRenderer(object):
                 l = ((p2[1] - p1[1]) ** 2 + (p2[0] - p1[0]) ** 2) ** 0.5
                 dx = -(p2[1] - p1[1]) / l 
                 dy = (p2[0] - p1[0]) / l 
-
-                # control point in the middle
-                txtp = (p1[0] + p2[0]) * 0.5 + 2 * self.EdgeSpacing * self.FontSize * i * dx, \
-                        (p1[1] + p2[1]) * 0.5 + 2 * self.EdgeSpacing * self.FontSize * i * dy 
-                controlp = tuple([
-                        (txtp[i] - (p1[i] + p2[i]) * 0.25) * 2
-                        for i in range(2)])
+                fac = 2.0
+            
+            # middle of the edge
+            txtp = (p1[0] + p2[0]) * 0.5 + fac * self.EdgeSpacing * self.FontSize * i * dx, \
+                    (p1[1] + p2[1]) * 0.5 + fac * self.EdgeSpacing * self.FontSize * i * dy 
+            # control point
+            controlp = tuple([
+                    (txtp[i] - (p1[i] + p2[i]) * 0.25) * 2
+                    for i in range(2)])
                 
             grp = Group()
             stroke_width = prop.pop('stroke_width', self.LineWidth)
@@ -392,7 +384,7 @@ class SVGRenderer(object):
                     stroke_linecap=stroke_linecap,
                     **prop)
 
-            grp.add(edge)
+            edge_layer.add(edge)
 
             txt = RichText(label, 
                     dy=self.LineSpacing * self.FontSize,
@@ -406,8 +398,42 @@ class SVGRenderer(object):
                     center=txtp)
             # raise away from the edge by half a line
             txt.translate(tx=0, ty=-self.FontSize * 0.5)
-            grp.add(txt)
-            dwg.add(grp)
+            label_layer.add(txt)
+
+        # draw the nodes
+        for node, data in g.nodes_iter(data=True):
+            label, prop = nodeformatter(node, data)
+            prop.pop('position', 0)
+            p = pos[node]
+            wh = size[node]
+            wh, p = self.scale(wh), self.scale(p)
+            grp = Group()
+            stroke = prop.pop('stroke', 'black')
+            fill = prop.pop('fill', 'none')
+            stroke_width = prop.pop('stroke_width', self.LineWidth)
+            rx = prop.pop('rx', self.FontSize)
+            ry = prop.pop('ry', self.FontSize)
+            ele = Rect(insert=p, size=wh, 
+                    stroke_width=stroke_width,
+                    stroke=stroke,
+                    fill=fill,
+                    rx=rx,
+                    ry=ry,
+                    **prop
+                    )
+            node_layer.add(ele)
+            txtp = p[0] + wh[0] * 0.5, p[1] + wh[1]
+
+            txt = RichText(label, 
+                    dy=self.LineSpacing * self.FontSize,
+                    insert=txtp, 
+                    font_family='monospace', 
+                    font_size=self.FontSize, 
+                    text_anchor="middle")
+
+            # raise away from the edge by half a line
+            txt.translate(tx=0, ty=-self.FontSize * 0.5)
+            label_layer.add(txt)
         return dwg.tostring()
 
 def maketestg():
