@@ -106,6 +106,7 @@ class SVGRenderer(object):
             Margin = 100., 
             LineWidth = '1px', 
             FontSize = 20.,
+            NodePadding = 0.25,
             EdgeSpacing = 2.,
             LineSpacing = 1.5):
         """ creates a SVGRender with these configurations:
@@ -114,6 +115,8 @@ class SVGRenderer(object):
             Margin: no nodes are placed beyond margin
             LineWidth: width of a line
             FontSize: size of the font for labels
+
+            NodePadding: padding within a node from text to the rect, in FontSize
             LineSpacing: spacing between lines with in a label, in FontSize
             EdgeSpacing: spacing between parallel edges, in FontSize
         """
@@ -123,14 +126,15 @@ class SVGRenderer(object):
         self.Margin = Margin
         self.LineWidth = LineWidth
         self.FontSize = FontSize
+        self.NodePadding = NodePadding
         self.EdgeSpacing = EdgeSpacing
         self.LineSpacing = LineSpacing
 
     def get_size(self, labeltxt, font_size):
         """ return size of label text in unitary cooridnate """
         lines = labeltxt.split('\n')
-        tw = max([len(line) for line in lines])
-        th = len(lines)
+        tw = max([len(line) for line in lines]) + self.NodePadding * 2
+        th = len(lines) + self.NodePadding * 2
         fac = font_size / self.GlobalScale
         width = tw * fac
         height = th * fac * self.LineSpacing
@@ -213,7 +217,7 @@ class SVGRenderer(object):
         return marker
 
     def draw(self, g, pos=None,
-            size=('800px', '600px'), 
+            size=('600px', '400px'), 
             nodeformatter=DefaultNodeFormatter, 
             edgeformatter=DefaultEdgeFormatter):
         """ 
@@ -432,7 +436,9 @@ class SVGRenderer(object):
                     **prop
                     )
             node_layer.add(ele)
-            txtp = p[0] + wh[0] * 0.5, p[1] + wh[1]
+
+            txtp =( p[0] + wh[0] * 0.5, 
+                    p[1] + wh[1] - self.NodePadding * self.FontSize)
 
             txt = RichText(label, 
                     dy=self.LineSpacing * font_size,
